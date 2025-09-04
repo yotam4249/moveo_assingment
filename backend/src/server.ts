@@ -50,7 +50,7 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
-app.options("*", cors());
+//app.options("*", cors());
 
 /* --- Remove the wildcard header block ---
    (These conflict with CORS + credentials and weaken security)
