@@ -9,7 +9,7 @@
     "testOnboarding": "jest --runInBand --config ./jest.config.js tests/onboarding.test.ts",
     "dev": "nodemon -r dotenv/config --watch src --ext ts --exec ts-node src/app.ts",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/app.js"
   },
   "keywords": [],
   "author": "",
