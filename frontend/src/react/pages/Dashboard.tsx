@@ -14,7 +14,7 @@ import PricesCard from "../components/cards/PricesCard";
 import InsightCard from "../components/cards/InsightCard";
 import MemeCard from "../components/cards/MemeCard";
 
-type SectionKey = "news" | "prices" | "insight" | "meme";
+//type SectionKey = "news" | "prices" | "insight" | "meme";
 
 export default function Dashboard() {
   const [prefs, setPrefs] = useState<string[]>([]);
@@ -32,7 +32,7 @@ export default function Dashboard() {
   const VISIBLE = 3;
   const [slideIndex, setSlideIndex] = useState(0);
 
-  const visibleSections: SectionKey[] = ["news", "prices", "insight", "meme"];
+  //const visibleSections: SectionKey[] = ["news", "prices", "insight", "meme"];
 
   // prefer ranked arrays, fallback to tags
   const newsList = useMemo<ContentItem[]>(
