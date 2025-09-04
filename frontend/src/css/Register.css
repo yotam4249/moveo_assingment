@@ -1,5 +1,5 @@
 /* Reuse the same styles as login */
-@import "./login.css";
+@import "./Login.css";
 
 /* Register form uses a grid class name in your TSX */
 .form-grid {
