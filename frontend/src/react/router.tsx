@@ -3,7 +3,8 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import LoginPage from "./pages/Login";
 import RegisterPage from "./pages/Register";
-import OnBoarding from "./pages/OnBoarding"; // ✅ add this
+import OnBoarding from "./pages/OnBoarding";
+import Dashboard from "./pages/Dashboard"; // ✅ import the real dashboard
 import type { JSX } from "react/jsx-runtime";
 
 function hasToken() {
@@ -19,13 +20,10 @@ export const router = createBrowserRouter([
   { path: "/login", element: <LoginPage /> },
   { path: "/register", element: <RegisterPage /> },
 
-  // ✅ use your real onboarding page
   { path: "/onboarding", element: <Protected element={<OnBoarding />} /> },
 
-  { path: "/dashboard", element: <Protected element={
-      <div className="container"><div className="card">Dashboard TODO</div></div>
-    } />
-  },
+  // ✅ use the actual Dashboard component (no placeholder)
+  { path: "/dashboard", element: <Protected element={<Dashboard />} /> },
 
   { path: "*", element: <Navigate to="/login" replace /> },
 ]);

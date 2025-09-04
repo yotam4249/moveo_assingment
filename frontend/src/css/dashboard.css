@@ -1,0 +1,94 @@
+/* Page layout */
+.db-wrap {
+    min-height: 100vh;
+    background: #0f172a; /* slate-900 */
+    padding: 20px;
+    color: #e2e8f0;     /* slate-200 */
+  }
+  
+  .db-grid {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  }
+  
+  /* Cards */
+  .db-card {
+    background: #0b1020;
+    border: 1px solid rgba(148,163,184,0.2);
+    border-radius: 16px;
+    padding: 16px;
+    box-shadow: 0 8px 24px rgba(2,6,23,0.45);
+  }
+  
+  .db-header { margin-bottom: 10px; }
+  .db-title  { font-size: 18px; margin: 0 0 6px; }
+  .db-sub    { color: #94a3b8; font-size: 13px; }
+  
+  /* Lists */
+  .db-list { list-style: none; padding: 0; margin: 0; }
+  .db-item { padding: 10px 0; border-bottom: 1px solid rgba(148,163,184,0.12); }
+  .db-item:last-child { border-bottom: none; }
+  
+  .db-link {
+    color: #bfdbfe;
+    text-decoration: none;
+    font-weight: 600;
+  }
+  .db-link:hover { text-decoration: underline; }
+  
+  .db-meta {
+    margin-top: 4px;
+    color: #94a3b8;
+    font-size: 12.5px;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  
+  /* Emphasis */
+  .db-strong { font-weight: 700; margin-bottom: 4px; }
+  .db-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .db-stack { display: grid; gap: 10px; }
+  
+  /* Meme */
+  .db-meme { display: grid; gap: 10px; }
+  .db-meme-img { width: 100%; height: auto; border-radius: 12px; }
+  .db-meme-cap { color: #cbd5e1; }
+  
+  /* Table alternative (unused here, kept for future) */
+  .db-table { width: 100%; border-collapse: collapse; }
+  .db-table th, .db-table td { padding: 10px 8px; border-bottom: 1px solid rgba(148,163,184,0.12); text-align: left; }
+  .db-table th { color: #94a3b8; font-weight: 600; }
+  .db-table td.pos { color: #34d399; }
+  .db-table td.neg { color: #fca5a5; }
+  
+  /* Buttons */
+  .db-btn {
+    padding: 8px 10px;
+    border: 1px solid rgba(148,163,184,0.35);
+    background: #0a0f1d;
+    color: #e2e8f0;
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  .db-btn:hover { background: #0f172a; }
+  
+  .db-actions, .db-vote {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  
+  /* Empty states */
+  .db-empty {
+    color: #94a3b8;
+    padding: 8px 0;
+  }
+  
+  /* Paragraphs */
+  .db-text {
+    white-space: pre-wrap;
+    line-height: 1.45;
+  }
+  

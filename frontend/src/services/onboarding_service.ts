@@ -18,13 +18,13 @@ export interface OnboardingStatus {
   };
 }
 
-/** Get current user's onboarding status (requires auth) */
+/** ✅ Server route is GET /api/onboarding/status */
 export async function getStatus(): Promise<OnboardingStatus> {
-  const { data } = await apiClient.get<OnboardingStatus>("/onboarding");
+  const { data } = await apiClient.get<OnboardingStatus>("/onboarding/status");
   return data;
 }
 
-/** Submit onboarding answers (requires auth) */
+/** ✅ Server route is POST /api/onboarding */
 export async function submitOnboarding(payload: OnboardingPayload) {
   const { data } = await apiClient.post("/onboarding", payload);
   return data;
