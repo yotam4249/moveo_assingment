@@ -1,8 +1,9 @@
-/* eslint-disable react-refresh/only-export-components */
 // src/react/router.tsx
+/* eslint-disable react-refresh/only-export-components */
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import LoginPage from "./pages/Login";
 import RegisterPage from "./pages/Register";
+import OnBoarding from "./pages/OnBoarding"; // ✅ add this
 import type { JSX } from "react/jsx-runtime";
 
 function hasToken() {
@@ -18,8 +19,13 @@ export const router = createBrowserRouter([
   { path: "/login", element: <LoginPage /> },
   { path: "/register", element: <RegisterPage /> },
 
-  { path: "/onboarding", element: <Protected element={<div className="container"><div className="card">Onboarding TODO</div></div>} /> },
-  { path: "/dashboard", element: <Protected element={<div className="container"><div className="card">Dashboard TODO</div></div>} /> },
+  // ✅ use your real onboarding page
+  { path: "/onboarding", element: <Protected element={<OnBoarding />} /> },
+
+  { path: "/dashboard", element: <Protected element={
+      <div className="container"><div className="card">Dashboard TODO</div></div>
+    } />
+  },
 
   { path: "*", element: <Navigate to="/login" replace /> },
 ]);
