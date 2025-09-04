@@ -1,0 +1,9 @@
+/* Reuse the same styles as login */
+@import "./login.css";
+
+/* Register form uses a grid class name in your TSX */
+.form-grid {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 14px;
+}

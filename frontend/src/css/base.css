@@ -1,0 +1,6 @@
+/* src/css/base.css */
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body { margin: 0; font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif; background: #0c0f1a; color: #e8ecf3; }
+a { color: inherit; }
