@@ -1,11 +1,10 @@
-import express, { Express, NextFunction, Request, Response } from "express";
 import dotenv from "dotenv";
+import express, { Express, NextFunction, Request, Response } from "express";
 import mongoose from "mongoose";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import api from "./routes";
 
-dotenv.config({ quiet: true });
 
 const app = express();
 app.use(express.json());
