@@ -221,56 +221,30 @@ async function buildAllContent(userId: string): Promise<{
   const topAsset = assetsByScore[0];
   console.log("[content] user assets:", assets, "assetsByScore:", assetsByScore);
 
-  /* -------- 1) PRICES (try top → next → ...) -------- */
-  let priceItems: ContentItem[] = [];
-  try {
-    // If we have scored assets, attempt single-asset queries in order until we get data
-    if (assetsByScore.length) {
-      let found: any[] | null = null;
-      let usedSymbol: string | null = null;
+/* -------- 1) PRICES (one combined call; cached; resilient) -------- */
+let priceItems: ContentItem[] = [];
+try {
+  // sort & cap to a reasonable number (e.g., top 10)
+  const assetsByScore = sortAssetsByScore(assets, assetScores).slice(0, 10);
 
-      for (const sym of assetsByScore) {
-        const markets = await getMarketsByAssets([sym]); // ask CG only for this symbol
-        const filt = markets.filter((m) => (m.symbol || "").toUpperCase() === sym);
-        if (filt.length) {
-          found = filt;
-          usedSymbol = sym;
-          break;
-        }
-      }
+  const markets = assetsByScore.length
+    ? await getMarketsByAssets(assetsByScore)
+    : await getMarketsByAssets([]); // returns [] with current impl
 
-      // If none produced data, fall back to all assets at once (old behavior)
-      const finalMarkets = found ?? (await getMarketsByAssets(assets));
-
-      priceItems = finalMarkets.map((m) => ({
-        id: `price:${m.id}`,
-        title: `${m.name} (${m.symbol.toUpperCase()}): $${m.current_price.toLocaleString()} (${m.price_change_percentage_24h?.toFixed?.(2)}% 24h)`,
-        summary: `24h: ${m.price_change_percentage_24h?.toFixed?.(2)}% • Rank: ${m.market_cap_rank ?? "?"}`,
-        url: `https://www.coingecko.com/en/coins/${m.id}`,
-        tags: ["prices"],
-        assets: [m.symbol.toUpperCase()],
-        publishedAt: new Date(),
-        source: "CoinGecko",
-      }));
-
-      console.log("[content] prices picked for:", usedSymbol ?? "fallback:all", "count:", priceItems.length);
-    } else {
-      // no assets – fall back to nothing or global fetch if you want
-      const markets = await getMarketsByAssets([]);
-      priceItems = markets.map((m) => ({
-        id: `price:${m.id}`,
-        title: `${m.name} (${m.symbol.toUpperCase()}): $${m.current_price.toLocaleString()} (${m.price_change_percentage_24h?.toFixed?.(2)}% 24h)`,
-        summary: `24h: ${m.price_change_percentage_24h?.toFixed?.(2)}% • Rank: ${m.market_cap_rank ?? "?"}`,
-        url: `https://www.coingecko.com/en/coins/${m.id}`,
-        tags: ["prices"],
-        assets: [m.symbol.toUpperCase()],
-        publishedAt: new Date(),
-        source: "CoinGecko",
-      }));
-    }
-  } catch (e) {
-    console.warn("[content] coingecko failed:", (e as any)?.message || e);
-  }
+  priceItems = (markets || []).map((m) => ({
+    id: `price:${m.id}`,
+    title: `${m.name} (${m.symbol.toUpperCase()}): $${m.current_price.toLocaleString()} (${m.price_change_percentage_24h?.toFixed?.(2)}% 24h)`,
+    summary: `24h: ${m.price_change_percentage_24h?.toFixed?.(2)}% • Rank: ${m.market_cap_rank ?? "?"}`,
+    url: `https://www.coingecko.com/en/coins/${m.id}`,
+    tags: ["prices"],
+    assets: [m.symbol.toUpperCase()],
+    publishedAt: new Date(),
+    source: "CoinGecko",
+  }));
+  console.log("[content] prices count:", priceItems.length);
+} catch (e) {
+  console.warn("[content] coingecko failed:", (e as any)?.message || e);
+}
 
   /* -------- 2) NEWS (daily cached; resilient; try top → next → ...) -------- */
   let newsItems: ContentItem[] = [];
