@@ -98,6 +98,7 @@ const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE,
   timeout: 30000,
 });
+console.log("API_BASE is:", API_BASE);
 
 // Always attach the latest token from localStorage
 apiClient.interceptors.request.use(
