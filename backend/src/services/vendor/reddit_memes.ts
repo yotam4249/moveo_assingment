@@ -7,13 +7,14 @@ const UA =
 const CLIENT_ID = process.env.REDDIT_CLIENT_ID || "";
 const CLIENT_SECRET = process.env.REDDIT_CLIENT_SECRET || "";
 
-// You can add more if you like:
-const SUBS = ["CryptoCurrencyMemes", "BitcoinMemes", "CryptoMemes"];
+// widen pool if needed
+const SUBS = ["CryptoCurrencyMemes", "BitcoinMemes", "CryptoMemes", "cryptomemes"];
 
 export type Meme = { url: string; caption: string };
 
 const LIST_CACHE_TTL = 5 * 60_000; // 5 min
 const listCache = new Map<string, { data: Meme[]; exp: number }>();
+let lastGoodList: Meme[] = [];
 const tokenCache = { token: "", exp: 0 };
 
 function cachePut(key: string, data: Meme[], ttl = LIST_CACHE_TTL) {
@@ -35,21 +36,13 @@ function cleanUrl(u: string): string {
 }
 
 async function getBearerToken(): Promise<string> {
-  // cached and still valid?
-  if (tokenCache.token && Date.now() < tokenCache.exp - 60_000) {
-    return tokenCache.token;
-  }
+  if (tokenCache.token && Date.now() < tokenCache.exp - 60_000) return tokenCache.token;
   if (!CLIENT_ID || !CLIENT_SECRET) {
     console.error("[reddit] Missing REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET");
     throw new Error("Missing REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET");
   }
 
-  // IMPORTANT: include scope=read
-  const body = new URLSearchParams({
-    grant_type: "client_credentials",
-    scope: "read",
-  }).toString();
-
+  const body = new URLSearchParams({ grant_type: "client_credentials", scope: "read" }).toString();
   const auth = Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString("base64");
 
   console.log("[reddit] requesting OAuth token (client_credentials, scope=read)");
@@ -79,11 +72,7 @@ async function fetchSubOAuth(sub: string, bearer: string): Promise<Meme[]> {
   const url = `https://oauth.reddit.com/r/${sub}/hot`;
   try {
     const { data } = await axios.get(url, {
-      headers: {
-        Authorization: `Bearer ${bearer}`,
-        "User-Agent": UA,
-        Accept: "application/json",
-      },
+      headers: { Authorization: `Bearer ${bearer}`, "User-Agent": UA, Accept: "application/json" },
       params: { limit: 50, raw_json: 1 },
       timeout: 10_000,
     });
@@ -96,22 +85,53 @@ async function fetchSubOAuth(sub: string, bearer: string): Promise<Meme[]> {
 
       let mediaUrl: string = d.url_overridden_by_dest || d.url || "";
       mediaUrl = cleanUrl(mediaUrl);
-
-      // If not a direct image, try preview
       if (!isImageUrl(mediaUrl)) {
         const prev = d.preview?.images?.[0]?.source?.url;
         if (prev && isImageUrl(cleanUrl(prev))) mediaUrl = cleanUrl(prev);
       }
-
       if (!isImageUrl(mediaUrl)) continue;
 
       out.push({ url: mediaUrl, caption: d.title || "" });
     }
-    console.log(`[reddit] /r/${sub} yielded ${out.length} image posts`);
+    console.log(`[reddit] OAuth /r/${sub} yielded ${out.length} image posts`);
     return out;
   } catch (e: any) {
     const code = e?.response?.status;
-    console.warn(`[reddit] /r/${sub} failed`, code || e?.message || e);
+    console.warn(`[reddit] OAuth /r/${sub} failed`, code || e?.message || e);
+    return [];
+  }
+}
+
+async function fetchSubPublic(sub: string): Promise<Meme[]> {
+  const url = `https://www.reddit.com/r/${sub}/hot.json`;
+  try {
+    const { data } = await axios.get(url, {
+      headers: { "User-Agent": UA, Accept: "application/json" },
+      params: { limit: 50, raw_json: 1 },
+      timeout: 10_000,
+    });
+
+    const children = data?.data?.children ?? [];
+    const out: Meme[] = [];
+    for (const c of children) {
+      const d = c?.data;
+      if (!d || d.over_18) continue;
+
+      let mediaUrl: string = d.url_overridden_by_dest || d.url || "";
+      mediaUrl = cleanUrl(mediaUrl);
+      if (!isImageUrl(mediaUrl)) {
+        const prev = d.preview?.images?.[0]?.source?.url;
+        if (prev && isImageUrl(cleanUrl(prev))) mediaUrl = cleanUrl(prev);
+      }
+      if (!isImageUrl(mediaUrl)) continue;
+
+      out.push({ url: mediaUrl, caption: d.title || "" });
+    }
+    console.log(`[reddit] Public /r/${sub} yielded ${out.length} image posts`);
+    return out;
+  } catch (e: any) {
+    const code = e?.response?.status;
+    console.warn(`[reddit] Public /r/${sub} failed`, code || e?.message || e);
     return [];
   }
 }
@@ -124,7 +144,7 @@ function pickDifferent(list: Meme[], avoidUrl?: string): Meme | null {
   return pickFrom[Math.floor(Math.random() * pickFrom.length)];
 }
 
-/** Return a random Reddit meme (OAuth), avoiding `avoidUrl` when possible. */
+/** Return a Reddit meme (tries OAuth first, then public JSON). */
 export async function getRandomMeme(avoidUrl?: string): Promise<Meme> {
   const key = "reddit:memes:v2";
   const cached = cacheGet(key);
@@ -134,25 +154,41 @@ export async function getRandomMeme(avoidUrl?: string): Promise<Meme> {
     return chosen;
   }
 
-  // Fetch fresh list via OAuth
-  const bearer = await getBearerToken();
-  const lists = await Promise.allSettled(SUBS.map((s) => fetchSubOAuth(s, bearer)));
-  const all: Meme[] = lists
-    .flatMap((r) => (r.status === "fulfilled" ? r.value : []))
-    .filter((m) => m && m.url);
+  // 1) OAuth path
+  let combined: Meme[] = [];
+  try {
+    const bearer = await getBearerToken();
+    const lists = await Promise.allSettled(SUBS.map((s) => fetchSubOAuth(s, bearer)));
+    combined = lists.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+  } catch (e: any) {
+    console.warn("[reddit] OAuth token or fetch failed:", e?.message || e);
+  }
 
-  // de-dupe by URL
-  const uniq = Array.from(new Map(all.map((m) => [m.url, m])).values());
+  // 2) Fallback to public JSON if OAuth yielded nothing
+  if (!combined.length) {
+    const listsPub = await Promise.allSettled(SUBS.map((s) => fetchSubPublic(s)));
+    combined = listsPub.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+  }
+
+  // De-dupe by URL
+  const uniq = Array.from(new Map(combined.map((m) => [m.url, m])).values());
   console.log("[reddit] combined pool size =", uniq.length);
 
   if (uniq.length) {
     cachePut(key, uniq, LIST_CACHE_TTL);
+    lastGoodList = uniq;
     const chosen = pickDifferent(uniq, avoidUrl) || { url: "", caption: "" };
     console.log("[reddit] choose fresh; chosen =", chosen.url);
     return chosen;
   }
 
-  // Nothing from Reddit right now
+  // 3) Last-gasp: reuse last good list if we had any
+  if (lastGoodList.length) {
+    console.warn("[reddit] using lastGoodList; size =", lastGoodList.length);
+    const chosen = pickDifferent(lastGoodList, avoidUrl) || { url: "", caption: "" };
+    return chosen;
+  }
+
   console.warn("[reddit] no image posts found from subs this round");
-  return { url: "", caption: "" }; // UI will show "No meme available"
+  return { url: "", caption: "" };
 }
