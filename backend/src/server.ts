@@ -128,19 +128,20 @@ const isProd = NODE_ENV === "production";
 
 /**
  * Comma-separated list of allowed frontend origins for production, e.g.:
- *   FRONTEND_ORIGIN=https://moveo-assingment-uiw9.vercel.app,https://moveo-assingment.vercel.app
+ * FRONTEND_ORIGIN=https://moveo-assingment-uiw9.vercel.app,https://moveo-assingment.vercel.app
+ * (Use the exact hostnames your browser shows.)
  */
 const FRONTEND_ORIGIN = (process.env.FRONTEND_ORIGIN ?? "")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
 
-/** Local dev origins are always allowed in non-production */
 const DEV_ORIGINS = ["http://localhost:5173", "http://localhost:3000"];
 
-/** Optional convenience: allow Vercel previews for your project name */
-const VERCEL_PREVIEW_REGEX =
-  /^(https:\/\/)(moveo-(assingment|assignment)-[a-z0-9-]+)(\.vercel\.app)$/i;
+// Optional: allow any vercel preview that contains your project slug.
+const VERCEL_PREVIEW_OK = (origin: string) =>
+  /\.vercel\.app$/.test(origin) &&
+  (origin.includes("moveo-assingment") || origin.includes("moveo-assignment"));
 
 /* --------------------------------- app ---------------------------------- */
 
@@ -150,7 +151,7 @@ app.set("trust proxy", true);
 
 app.use(
   helmet({
-    contentSecurityPolicy: false, // keep minimal CSP below
+    contentSecurityPolicy: false, // minimal CSP below
   })
 );
 
@@ -168,25 +169,20 @@ const allowList = new Set<string>([
 app.use(
   cors({
     origin(origin, cb) {
-      if (!origin) return cb(null, true); // allow curl/health checks & SSR
-      const allowedExplicitly = allowList.has(origin);
-      const allowedByPreview = VERCEL_PREVIEW_REGEX.test(origin); // optional
-      if (allowedExplicitly || allowedByPreview) return cb(null, true);
+      if (!origin) return cb(null, true); // allow curl/health checks
+      if (allowList.has(origin) || VERCEL_PREVIEW_OK(origin)) return cb(null, true);
       console.warn("[CORS] blocked origin:", origin);
       return cb(new Error(`CORS blocked: ${origin}`));
     },
-    /**
-     * You are authenticating via Authorization: Bearer <token>,
-     * not cookies → credentials can be false and wildcard responses are OK.
-     */
-    credentials: false,
+    credentials: false, // using Authorization header (not cookies)
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
+    optionsSuccessStatus: 204,
   })
 );
 
-/** Answer preflights for every route */
-app.options("*", cors());
+// IMPORTANT: Express 5 + path-to-regexp — don't use "*"
+app.options("(.*)", cors());
 
 /* ------------------------------ HTTPS only ------------------------------ */
 
