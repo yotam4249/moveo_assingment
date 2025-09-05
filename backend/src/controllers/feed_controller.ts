@@ -77,15 +77,17 @@ export async function getFeed(req: AuthedRequest, res: Response) {
  * GET /meme
  * Separate endpoint; preserves your existing behavior with a safe fallback.
  */
-export async function getMeme(_req: AuthedRequest, res: Response) {
+// inside src/controllers/feed_controller.ts
+
+
+export async function getMeme(req: Request, res: Response) {
   try {
-    const meme = await getRandomMeme();
-    res.json(meme);
+    const avoid = (req.query?.avoid as string) || "";
+    const meme = await getRandomMeme(avoid);
+    return res.json(meme);
   } catch (e: any) {
-    console.warn("[meme] error:", e?.message || e);
-    res.json({
-      url: "https://i.imgflip.com/30b1gx.jpg",
-      caption: "HODL even the coffee ☕🚀",
-    });
+    console.error("[/meme] error:", e?.message || e);
+    return res.status(200).json({ url: "", caption: "No meme available" });
   }
 }
+

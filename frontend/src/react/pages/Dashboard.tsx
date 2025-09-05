@@ -134,15 +134,19 @@ export default function Dashboard() {
   }
 
   // Meme: on 👎, fetch a brand-new meme (do not touch other sections)
-  async function fetchAndSwapMeme() {
-    try {
-      const { data } = await apiClient.get<Meme>("/meme");
-      setFeed((prev) => (prev ? { ...prev, meme: data } : prev));
-    } catch (e) {
-      console.warn("Failed to fetch new meme:", e);
-      setFeed((prev) => (prev ? { ...prev, meme: null } : prev));
-    }
+// inside Dashboard.tsx
+async function fetchAndSwapMeme() {
+  try {
+    const avoid = feed?.meme?.url || "";
+    const { data } = await apiClient.get<Meme>("/meme", { params: { avoid, t: Date.now() } });
+    setFeed((prev) => (prev ? { ...prev, meme: data } : prev));
+  } catch (e) {
+    console.warn("Failed to fetch new meme:", e);
+    setFeed((prev) => (prev ? { ...prev, meme: null } : prev));
   }
+}
+
+
 
   /* ---------- Early UI states ---------- */
 
