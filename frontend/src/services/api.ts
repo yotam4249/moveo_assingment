@@ -6,7 +6,7 @@ import type { AxiosError, AxiosInstance, AxiosRequestConfig } from "axios";
 import userService from "./user_service";
 export { CanceledError };
 
-const API_BASE = "https://moveo-assingment.onrender.com/api"
+const API_BASE = "https://moveo-assignment.onrender.com/api "
 const REFRESH_PATH = "/auth/refresh";
 
 const apiClient: AxiosInstance = axios.create({

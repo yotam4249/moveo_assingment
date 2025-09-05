@@ -29,7 +29,7 @@ export interface RegisterResponse {
 }
 
 // Use Vite env for raw axios calls as well
-const API_BASE = import.meta.env.VITE_API_BASE ?? "https://moveo-assingment.onrender.com/api";
+const API_BASE = import.meta.env.VITE_API_BASE ?? "https://moveo-assignment.onrender.com/api ";
 
 // ---------- Reads ----------
 export const getUserById = async (userId: string) => {
