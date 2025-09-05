@@ -91,9 +91,9 @@ import type { AxiosError, AxiosInstance, AxiosRequestConfig } from "axios";
 import userService from "./user_service";
 export { CanceledError };
 
-const API_BASE =  "https://moveo-assignment.onrender.com/api";
+const API_BASE = import.meta.env.VITE_API_BASE ?? "https://moveo-assignment.onrender.com/api";
 const REFRESH_PATH = "/auth/refresh";
-console.log("VITE_API_URL =   " + import.meta.env.VITE_API_BASE)
+
 const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE,
   timeout: 30000,
