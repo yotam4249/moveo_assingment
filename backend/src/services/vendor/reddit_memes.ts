@@ -1,18 +1,23 @@
-// src/services/vendor/reddit_memes.ts
 import axios from "axios";
 
 const UA =
   process.env.REDDIT_UA ||
-  "CryptoInvestorDashboard/1.5.0 (Node.js; memes) contact: you@example.com; instance: unknown";
-const CLIENT_ID = process.env.REDDIT_CLIENT_ID || "";
-const CLIENT_SECRET = process.env.REDDIT_CLIENT_SECRET || "";
+  "CryptoInvestorDashboard/1.6.0 (Node.js; memes) contact: you@example.com; instance: unknown";
 
-// widen pool if needed
+// 🔑 Reddit app config
+// Use an **Installed App** on https://www.reddit.com/prefs/apps
+// client_id is required; secret is blank for installed apps
+const CLIENT_ID = process.env.REDDIT_CLIENT_ID || "";
+const CLIENT_SECRET = process.env.REDDIT_CLIENT_SECRET ?? ""; // may be "" for installed
+const APP_KIND = (process.env.REDDIT_APP_KIND || "installed").toLowerCase(); // "installed" | "web" | "script"
+const DEVICE_ID = process.env.REDDIT_DEVICE_ID || "DO_NOT_TRACK_THIS_DEVICE"; // any stable string/uuid for installed grant
+
+// widen pool a bit
 const SUBS = ["CryptoCurrencyMemes", "BitcoinMemes", "CryptoMemes", "cryptomemes"];
 
 export type Meme = { url: string; caption: string };
 
-const LIST_CACHE_TTL = 5 * 60_000; // 5 min
+const LIST_CACHE_TTL = 5 * 60_000; // 5 minutes
 const listCache = new Map<string, { data: Meme[]; exp: number }>();
 let lastGoodList: Meme[] = [];
 const tokenCache = { token: "", exp: 0 };
@@ -35,29 +40,65 @@ function cleanUrl(u: string): string {
   return (u || "").replace(/&amp;/g, "&");
 }
 
+/** Get a bearer token using the correct Reddit grant.
+ *
+ * For **Installed App (userless)**:
+ *   grant_type=https://oauth.reddit.com/grants/installed_client
+ *   device_id=DO_NOT_TRACK_THIS_DEVICE (or your own stable id)
+ *   Basic auth = base64(client_id + ":")   // empty secret
+ *
+ * For **Web/Script** (rarely needed here), we’d use user auth; we keep
+ * client_credentials only as a best-effort fallback if configured.
+ */
 async function getBearerToken(): Promise<string> {
-  if (tokenCache.token && Date.now() < tokenCache.exp - 60_000) return tokenCache.token;
-  if (!CLIENT_ID || !CLIENT_SECRET) {
-    console.error("[reddit] Missing REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET");
-    throw new Error("Missing REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET");
+  if (tokenCache.token && Date.now() < tokenCache.exp - 60_000) {
+    return tokenCache.token;
+  }
+  if (!CLIENT_ID) {
+    console.error("[reddit] Missing REDDIT_CLIENT_ID");
+    throw new Error("Missing REDDIT_CLIENT_ID");
   }
 
-  const body = new URLSearchParams({ grant_type: "client_credentials", scope: "read" }).toString();
-  const auth = Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString("base64");
+  let body: string;
+  let authHeader: string;
 
-  console.log("[reddit] requesting OAuth token (client_credentials, scope=read)");
+  if (APP_KIND === "installed" || CLIENT_SECRET === "") {
+    // ✅ Installed client userless OAuth
+    body = new URLSearchParams({
+      grant_type: "https://oauth.reddit.com/grants/installed_client",
+      device_id: DEVICE_ID,
+      scope: "read",
+    }).toString();
+    authHeader = "Basic " + Buffer.from(`${CLIENT_ID}:`).toString("base64");
+    console.log("[reddit] requesting OAuth token (installed_client, scope=read, device_id=", DEVICE_ID, ")");
+  } else {
+    // Fallback (may not be allowed for content): client_credentials
+    body = new URLSearchParams({
+      grant_type: "client_credentials",
+      scope: "read",
+    }).toString();
+    authHeader = "Basic " + Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString("base64");
+    console.log("[reddit] requesting OAuth token (client_credentials, scope=read)");
+  }
+
   const resp = await axios.post(
     "https://www.reddit.com/api/v1/access_token",
     body,
     {
       headers: {
-        Authorization: `Basic ${auth}`,
+        Authorization: authHeader,
         "Content-Type": "application/x-www-form-urlencoded",
         "User-Agent": UA,
       },
-      timeout: 10_000,
+      timeout: 12_000,
+      validateStatus: () => true,
     }
   );
+
+  if (resp.status !== 200) {
+    console.warn("[reddit] OAuth token request failed:", resp.status, resp.data);
+    throw new Error(`OAuth failed (${resp.status})`);
+  }
 
   const tok = resp.data?.access_token as string;
   const ttl = Number(resp.data?.expires_in || 3600) * 1000;
@@ -71,11 +112,16 @@ async function getBearerToken(): Promise<string> {
 async function fetchSubOAuth(sub: string, bearer: string): Promise<Meme[]> {
   const url = `https://oauth.reddit.com/r/${sub}/hot`;
   try {
-    const { data } = await axios.get(url, {
+    const { data, status } = await axios.get(url, {
       headers: { Authorization: `Bearer ${bearer}`, "User-Agent": UA, Accept: "application/json" },
       params: { limit: 50, raw_json: 1 },
       timeout: 10_000,
+      validateStatus: () => true,
     });
+    if (status !== 200) {
+      console.warn(`[reddit] OAuth /r/${sub} failed`, status);
+      return [];
+    }
 
     const children = data?.data?.children ?? [];
     const out: Meme[] = [];
@@ -96,8 +142,7 @@ async function fetchSubOAuth(sub: string, bearer: string): Promise<Meme[]> {
     console.log(`[reddit] OAuth /r/${sub} yielded ${out.length} image posts`);
     return out;
   } catch (e: any) {
-    const code = e?.response?.status;
-    console.warn(`[reddit] OAuth /r/${sub} failed`, code || e?.message || e);
+    console.warn(`[reddit] OAuth /r/${sub} error`, e?.response?.status || e?.message || e);
     return [];
   }
 }
@@ -105,11 +150,16 @@ async function fetchSubOAuth(sub: string, bearer: string): Promise<Meme[]> {
 async function fetchSubPublic(sub: string): Promise<Meme[]> {
   const url = `https://www.reddit.com/r/${sub}/hot.json`;
   try {
-    const { data } = await axios.get(url, {
+    const { data, status } = await axios.get(url, {
       headers: { "User-Agent": UA, Accept: "application/json" },
       params: { limit: 50, raw_json: 1 },
       timeout: 10_000,
+      validateStatus: () => true,
     });
+    if (status !== 200) {
+      console.warn(`[reddit] Public /r/${sub} failed`, status);
+      return [];
+    }
 
     const children = data?.data?.children ?? [];
     const out: Meme[] = [];
@@ -130,8 +180,7 @@ async function fetchSubPublic(sub: string): Promise<Meme[]> {
     console.log(`[reddit] Public /r/${sub} yielded ${out.length} image posts`);
     return out;
   } catch (e: any) {
-    const code = e?.response?.status;
-    console.warn(`[reddit] Public /r/${sub} failed`, code || e?.message || e);
+    console.warn(`[reddit] Public /r/${sub} error`, e?.response?.status || e?.message || e);
     return [];
   }
 }
@@ -144,7 +193,7 @@ function pickDifferent(list: Meme[], avoidUrl?: string): Meme | null {
   return pickFrom[Math.floor(Math.random() * pickFrom.length)];
 }
 
-/** Return a Reddit meme (tries OAuth first, then public JSON). */
+/** Return a Reddit meme (tries installed-client OAuth first, then public JSON). */
 export async function getRandomMeme(avoidUrl?: string): Promise<Meme> {
   const key = "reddit:memes:v2";
   const cached = cacheGet(key);
@@ -154,7 +203,7 @@ export async function getRandomMeme(avoidUrl?: string): Promise<Meme> {
     return chosen;
   }
 
-  // 1) OAuth path
+  // 1) OAuth path (installed client)
   let combined: Meme[] = [];
   try {
     const bearer = await getBearerToken();
@@ -190,5 +239,5 @@ export async function getRandomMeme(avoidUrl?: string): Promise<Meme> {
   }
 
   console.warn("[reddit] no image posts found from subs this round");
-  return { url: "", caption: "" };
+  return { url: "", caption: "" }; // UI will show "No meme available"
 }
