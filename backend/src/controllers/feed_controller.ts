@@ -19,78 +19,42 @@ function resolveUserId(req: AuthedRequest): string | undefined {
   );
 }
 
-/**
- * GET /feed
- * Returns:
- *  - date: ISO timestamp
- *  - items: mixed top ~8 (backward compatible)
- *  - ranked: { news, prices, insight } each sorted high→low by score
- *  - meme: random meme with safe fallback
- */
+/** GET /feed — ranked content; no meme here (UI calls /meme separately) */
 export async function getFeed(req: AuthedRequest, res: Response) {
   try {
     const uid = resolveUserId(req);
-    if (!uid) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
+    if (!uid) return res.status(401).json({ error: "Unauthorized" });
 
-    const [feedRes, memeRes] = await Promise.allSettled([
-      getCuratedFeed(uid),
-      getRandomMeme(),
-    ]);
-
-    const { items, ranked } =
-      feedRes.status === "fulfilled"
-        ? feedRes.value
-        : { items: [], ranked: { news: [], prices: [], insight: [] } };
-
-    const meme =
-      memeRes.status === "fulfilled"
-        ? memeRes.value
-        : {
-            url: "https://i.imgflip.com/30b1gx.jpg",
-            caption: "HODL even the coffee ☕🚀",
-          };
-
-    res.json({
+    const { items, ranked } = await getCuratedFeed(uid);
+    return res.json({
       date: new Date().toISOString(),
-      items,   // legacy mixed list
-      ranked,  // NEW per-section arrays (sorted by score desc)
-      meme,    // keep for UI compatibility
+      items,
+      ranked,
+      meme: null, // UI fetches via /meme
     });
   } catch (e: any) {
     console.error("[feed] fatal:", e?.message || e);
-    res.status(500).json({
+    return res.status(500).json({
       date: new Date().toISOString(),
       items: [],
       ranked: { news: [], prices: [], insight: [] },
-      meme: {
-        url: "https://i.imgflip.com/30b1gx.jpg",
-        caption: "HODL even the coffee ☕🚀",
-      },
+      meme: null,
       error: "Failed to build feed",
     });
   }
 }
 
-/**
- * GET /meme
- * Separate endpoint; preserves your existing behavior with a safe fallback.
- */
-// inside src/controllers/feed_controller.ts
-
-
+/** GET /meme — returns a Reddit image; avoids ?avoid when possible */
 export async function getMeme(req: Request, res: Response) {
   try {
     const avoid = (req.query?.avoid as string) || "";
     const meme = await getRandomMeme(avoid);
-    // prevent proxies from serving stale results
     res.setHeader("Cache-Control", "no-store, max-age=0");
     console.log("[/meme] avoid =", avoid, "chosen =", meme?.url);
-    return res.json(meme);
+    return res.json(meme); // { url:"", caption:"" } if Reddit yields nothing
   } catch (e: any) {
     console.error("[/meme] error:", e?.message || e);
-    return res.status(200).json({ url: "", caption: "No meme available" });
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+    return res.status(200).json({ url: "", caption: "" });
   }
 }
-

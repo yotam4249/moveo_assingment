@@ -1,115 +1,118 @@
-// // src/services/vendor/reddit_memes.ts
-// import axios from "axios";
-
-// const UA = process.env.REDDIT_UA || "CryptoDashboardBot/1.0 by yourname";
-// const SUBS = ["CryptoCurrencyMemes", "BitcoinMemes", "CryptoMemes"];
-
-// export type Meme = { url: string; caption: string };
-
-// const cache = new Map<string, { data: Meme[]; exp: number }>();
-// const put = (k: string, data: Meme[], ttlMs = 5 * 60_000) => cache.set(k, { data, exp: Date.now() + ttlMs });
-// const get = (k: string) => {
-//   const v = cache.get(k);
-//   if (!v) return null;
-//   if (Date.now() > v.exp) { cache.delete(k); return null; }
-//   return v.data;
-// };
-
-// async function fetchSub(sub: string): Promise<Meme[]> {
-//   const url = `https://www.reddit.com/r/${sub}/hot.json?limit=30`;
-//   const { data } = await axios.get(url, { headers: { "User-Agent": UA }, timeout: 10_000 });
-//   const children = data?.data?.children ?? [];
-//   const memes: Meme[] = children
-//     .map((c: any) => c?.data)
-//     .filter((d: any) => d?.url && (d?.post_hint === "image" || /\.(jpg|jpeg|png|gif)$/i.test(d?.url)))
-//     .map((d: any) => ({ url: d.url, caption: d.title }));
-//   return memes;
-// }
-
-// export async function getRandomMeme(): Promise<Meme> {
-//   const key = `reddit:memes`;
-//   const cached = get(key);
-//   if (cached?.length) return cached[Math.floor(Math.random() * cached.length)];
-
-//   const lists = await Promise.allSettled(SUBS.map(fetchSub));
-//   const all: Meme[] = lists
-//     .flatMap((r) => (r.status === "fulfilled" ? r.value : []))
-//     .filter(Boolean);
-
-//   if (!all.length) {
-//     return { url: "https://i.imgflip.com/30b1gx.jpg", caption: "HODL even the coffee ☕🚀" };
-//   }
-//   put(key, all, 5 * 60_000);
-//   return all[Math.floor(Math.random() * all.length)];
-// }
 // src/services/vendor/reddit_memes.ts
 import axios from "axios";
 
-const UA = process.env.REDDIT_UA || "CryptoDashboardBot/1.0 by yourname";
+const UA =
+  process.env.REDDIT_UA ||
+  "CryptoInvestorDashboard/1.5.0 (Node.js; memes) contact: you@example.com; instance: unknown";
+const CLIENT_ID = process.env.REDDIT_CLIENT_ID || "";
+const CLIENT_SECRET = process.env.REDDIT_CLIENT_SECRET || "";
 const SUBS = ["CryptoCurrencyMemes", "BitcoinMemes", "CryptoMemes"];
 
 export type Meme = { url: string; caption: string };
 
-// 5-min in-memory cache
-const cache = new Map<string, { data: Meme[]; exp: number }>();
-const put = (k: string, data: Meme[], ttlMs = 5 * 60_000) =>
-  cache.set(k, { data, exp: Date.now() + ttlMs });
-const get = (k: string) => {
-  const v = cache.get(k);
+const LIST_CACHE_TTL = 5 * 60_000; // 5 min
+const listCache = new Map<string, { data: Meme[]; exp: number }>();
+const tokenCache = { token: "", exp: 0 };
+
+function cachePut(key: string, data: Meme[], ttl = LIST_CACHE_TTL) {
+  listCache.set(key, { data, exp: Date.now() + ttl });
+}
+function cacheGet(key: string): Meme[] | null {
+  const v = listCache.get(key);
   if (!v) return null;
-  if (Date.now() > v.exp) { cache.delete(k); return null; }
+  if (Date.now() > v.exp) { listCache.delete(key); return null; }
   return v.data;
-};
+}
 
 function isImageUrl(url: string): boolean {
-  if (!url) return false;
-  const u = url.toLowerCase();
+  const u = (url || "").toLowerCase();
   return u.endsWith(".jpg") || u.endsWith(".jpeg") || u.endsWith(".png") || u.endsWith(".gif");
 }
-
-async function fetchSub(sub: string): Promise<Meme[]> {
-  const url = `https://www.reddit.com/r/${sub}/hot.json?limit=30`;
-  const { data } = await axios.get(url, { headers: { "User-Agent": UA }, timeout: 10_000 });
-  const children = data?.data?.children ?? [];
-  const memes: Meme[] = children
-    .map((c: any) => c?.data)
-    .filter((d: any) => d && !d.over_18) // skip NSFW
-    .map((d: any) => {
-      const url: string = d.url_overridden_by_dest || d.url || "";
-      const title: string = d.title || "";
-      return { url, caption: title };
-    })
-    .filter((m: { url: string; }) => isImageUrl(m.url));
-  return memes;
+function cleanUrl(u: string): string {
+  return (u || "").replace(/&amp;/g, "&");
 }
 
-/**
- * Return a random meme, avoiding `avoidUrl` if possible.
- * If all candidates equal the avoided one (rare), we return one anyway.
- */
-export async function getRandomMeme(avoidUrl?: string): Promise<Meme> {
-  const key = `reddit:memes`;
-  const cached = get(key);
+async function getBearerToken(): Promise<string> {
+  if (tokenCache.token && Date.now() < tokenCache.exp - 60_000) return tokenCache.token;
+  if (!CLIENT_ID || !CLIENT_SECRET) throw new Error("Missing REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET");
 
-  let list = cached;
-  if (!list || !list.length) {
-    const lists = await Promise.allSettled(SUBS.map(fetchSub));
-    const all: Meme[] = lists
-      .flatMap((r) => (r.status === "fulfilled" ? r.value : []))
-      .filter(Boolean);
-    if (!all.length) {
-      return { url: "https://i.imgflip.com/30b1gx.jpg", caption: "HODL even the coffee ☕🚀" };
+  const auth = Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString("base64");
+  const resp = await axios.post(
+    "https://www.reddit.com/api/v1/access_token",
+    new URLSearchParams({ grant_type: "client_credentials" }).toString(),
+    {
+      headers: {
+        Authorization: `Basic ${auth}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": UA,
+      },
+      timeout: 10_000,
     }
-    // de-duplicate by URL and cache for 5m
-    list = Array.from(new Map(all.map((r) => [r.url, r])).values());
-    put(key, list, 5 * 60_000);
-  }
+  );
 
-  const trimmedAvoid = String(avoidUrl || "").trim();
-  const pool = trimmedAvoid ? list.filter((m) => m.url !== trimmedAvoid) : list;
-  const pickFrom = pool.length ? pool : list; // if everything equals avoid, fallback
-
-  const idx = Math.floor(Math.random() * pickFrom.length);
-  return pickFrom[idx];
+  const tok = resp.data?.access_token as string;
+  const ttl = Number(resp.data?.expires_in || 3600) * 1000;
+  if (!tok) throw new Error("Reddit OAuth: no access_token");
+  tokenCache.token = tok;
+  tokenCache.exp = Date.now() + ttl;
+  return tok;
 }
 
+async function fetchSubOAuth(sub: string, bearer: string): Promise<Meme[]> {
+  const url = `https://oauth.reddit.com/r/${sub}/hot`;
+  try {
+    const { data } = await axios.get(url, {
+      headers: { Authorization: `Bearer ${bearer}`, "User-Agent": UA, Accept: "application/json" },
+      params: { limit: 50, raw_json: 1 },
+      timeout: 10_000,
+    });
+
+    const children = data?.data?.children ?? [];
+    const out: Meme[] = [];
+    for (const c of children) {
+      const d = c?.data;
+      if (!d || d.over_18) continue;
+
+      let mediaUrl: string = d.url_overridden_by_dest || d.url || "";
+      mediaUrl = cleanUrl(mediaUrl);
+      if (!isImageUrl(mediaUrl)) {
+        const prev = d.preview?.images?.[0]?.source?.url;
+        if (prev && isImageUrl(cleanUrl(prev))) mediaUrl = cleanUrl(prev);
+      }
+      if (!isImageUrl(mediaUrl)) continue;
+
+      out.push({ url: mediaUrl, caption: d.title || "" });
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+function pickDifferent(list: Meme[], avoidUrl?: string): Meme | null {
+  if (!list.length) return null;
+  const avoid = (avoidUrl || "").trim();
+  const pool = avoid ? list.filter((m) => m.url !== avoid) : list;
+  const pickFrom = pool.length ? pool : list;
+  return pickFrom[Math.floor(Math.random() * pickFrom.length)];
+}
+
+/** Return a random Reddit meme (OAuth), avoiding `avoidUrl` when possible. */
+export async function getRandomMeme(avoidUrl?: string): Promise<Meme> {
+  const key = "reddit:memes:v2";
+  const cached = cacheGet(key);
+  if (cached?.length) return pickDifferent(cached, avoidUrl) || { url: "", caption: "" };
+
+  const bearer = await getBearerToken();
+  const lists = await Promise.allSettled(SUBS.map((s) => fetchSubOAuth(s, bearer)));
+  const all = lists.flatMap((r) => (r.status === "fulfilled" ? r.value : [])).filter((m) => m && m.url);
+
+  // de-duplicate by URL
+  const uniq = Array.from(new Map(all.map((m) => [m.url, m])).values());
+
+  if (uniq.length) {
+    cachePut(key, uniq, LIST_CACHE_TTL);
+    return pickDifferent(uniq, avoidUrl) || { url: "", caption: "" };
+  }
+  return { url: "", caption: "" }; // Reddit yielded nothing (no hardcoded fallback)
+}
