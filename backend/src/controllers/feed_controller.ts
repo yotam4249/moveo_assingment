@@ -84,6 +84,9 @@ export async function getMeme(req: Request, res: Response) {
   try {
     const avoid = (req.query?.avoid as string) || "";
     const meme = await getRandomMeme(avoid);
+    // prevent proxies from serving stale results
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+    console.log("[/meme] avoid =", avoid, "chosen =", meme?.url);
     return res.json(meme);
   } catch (e: any) {
     console.error("[/meme] error:", e?.message || e);

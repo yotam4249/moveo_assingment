@@ -89,29 +89,27 @@ async function fetchSub(sub: string): Promise<Meme[]> {
  */
 export async function getRandomMeme(avoidUrl?: string): Promise<Meme> {
   const key = `reddit:memes`;
-  let list = get(key);
+  const cached = get(key);
 
+  let list = cached;
   if (!list || !list.length) {
     const lists = await Promise.allSettled(SUBS.map(fetchSub));
     const all: Meme[] = lists
       .flatMap((r) => (r.status === "fulfilled" ? r.value : []))
-      .filter((m) => m && m.url);
-
-    // de-duplicate by URL
-    const uniq = Array.from(new Map(all.map((r) => [r.url, r])).values());
-    // cache
-    put(key, uniq, 5 * 60_000);
-    list = uniq;
-  }
-
-  if (!list?.length) {
-    return { url: "https://i.imgflip.com/30b1gx.jpg", caption: "HODL even the coffee ☕🚀" };
+      .filter(Boolean);
+    if (!all.length) {
+      return { url: "https://i.imgflip.com/30b1gx.jpg", caption: "HODL even the coffee ☕🚀" };
+    }
+    // de-duplicate by URL and cache for 5m
+    list = Array.from(new Map(all.map((r) => [r.url, r])).values());
+    put(key, list, 5 * 60_000);
   }
 
   const trimmedAvoid = String(avoidUrl || "").trim();
   const pool = trimmedAvoid ? list.filter((m) => m.url !== trimmedAvoid) : list;
-  const pickFrom = pool.length ? pool : list;
+  const pickFrom = pool.length ? pool : list; // if everything equals avoid, fallback
 
   const idx = Math.floor(Math.random() * pickFrom.length);
   return pickFrom[idx];
 }
+

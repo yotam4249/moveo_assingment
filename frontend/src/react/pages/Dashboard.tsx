@@ -138,13 +138,16 @@ export default function Dashboard() {
 async function fetchAndSwapMeme() {
   try {
     const avoid = feed?.meme?.url || "";
+    console.log("[meme] requesting new meme, avoid =", avoid);
     const { data } = await apiClient.get<Meme>("/meme", { params: { avoid, t: Date.now() } });
+    console.log("[meme] got meme =", data?.url);
     setFeed((prev) => (prev ? { ...prev, meme: data } : prev));
   } catch (e) {
     console.warn("Failed to fetch new meme:", e);
     setFeed((prev) => (prev ? { ...prev, meme: null } : prev));
   }
 }
+
 
 
 
